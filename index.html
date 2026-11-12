@@ -1,0 +1,405 @@
+<title>Mailbird Attachment Tool</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one working column. Summary line, then a filter bench, then a ledger of files that can be regrouped by domain or sender. */
+:root {
+  --bg: #f4f7f6; --surface: #ffffff; --sunk: #e9eeed; --ink: #15201f; --muted: #586867;
+  --line: #d6dedd; --accent: #0b6767; --accent-ink: #ffffff; --accent-soft: #dcefee; --warn-bg: #fdf3d7; --warn-ink: #5c4500;
+  --k-pdf: #b3392f; --k-doc: #2b5fb8; --k-sheet: #1c7a45; --k-slides: #b8620f; --k-image: #7a47b3; --k-cal: #0b6767; --k-zip: #6b5a2e; --k-other: #586867;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f1514; --surface: #171f1e; --sunk: #1f2928; --ink: #e4eceb; --muted: #93a4a2;
+  --line: #2b3736; --accent: #56c4bf; --accent-ink: #062423; --accent-soft: #163634; --warn-bg: #3a3010; --warn-ink: #f1dc9a;
+  --k-pdf: #f08a80; --k-doc: #86aef0; --k-sheet: #6fcf97; --k-slides: #f0a860; --k-image: #c09af0; --k-cal: #56c4bf; --k-zip: #cdb97f; --k-other: #93a4a2;
+  color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0f1514; --surface: #171f1e; --sunk: #1f2928; --ink: #e4eceb; --muted: #93a4a2;
+  --line: #2b3736; --accent: #56c4bf; --accent-ink: #062423; --accent-soft: #163634; --warn-bg: #3a3010; --warn-ink: #f1dc9a;
+  --k-pdf: #f08a80; --k-doc: #86aef0; --k-sheet: #6fcf97; --k-slides: #f0a860; --k-image: #c09af0; --k-cal: #56c4bf; --k-zip: #cdb97f; --k-other: #93a4a2;
+  color-scheme: dark }
+
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.45 }
+.wrap { max-width: 1120px; margin: 0 auto; padding-block: 28px 56px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 18px }
+h1 { font-size: 26px; font-weight: 600; letter-spacing: -0.01em; margin: 0; text-wrap: balance }
+.sub { color: var(--muted); margin: 4px 0 0; font-size: 14px }
+.sub b { color: var(--ink); font-weight: 500 }
+.notice { background: var(--warn-bg); color: var(--warn-ink); border-radius: 6px; padding: 10px 14px; font-size: 14px }
+
+.bench { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 12px }
+.row { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end }
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 0 }
+.field.grow { flex: 1 1 220px }
+label, .lab { font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); font-weight: 500 }
+input[type="search"], input[type="text"], input[type="date"], select {
+  font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 7px 10px; min-width: 0; width: 100% }
+input[type="date"] { font-family: var(--mono); font-size: 13px }
+button { font: inherit; cursor: pointer; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 11px }
+button:hover { border-color: var(--accent) }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+.chips { display: flex; flex-wrap: wrap; gap: 6px }
+.chip { border-radius: 999px; padding: 4px 11px; font-size: 13px }
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink) }
+.chip .n { font-family: var(--mono); font-size: 12px; opacity: 0.75; margin-left: 4px }
+.check { display: flex; align-items: center; gap: 7px; font-size: 14px; color: var(--ink); text-transform: none; letter-spacing: 0 }
+
+.tally { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: baseline; justify-content: space-between }
+.tally p { margin: 0; font-size: 14px; color: var(--muted) }
+.tally b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums }
+.linkish { border: 0; background: none; padding: 0; color: var(--accent); text-decoration: underline; font-size: 14px }
+
+.ledger { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow-x: auto }
+table { width: 100%; border-collapse: collapse; font-size: 14px }
+th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); font-weight: 500; padding: 0; border-bottom: 1px solid var(--line); white-space: nowrap }
+th button { border: 0; background: none; font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit; padding: 10px 12px; width: 100%; text-align: inherit; border-radius: 0 }
+th button[aria-sort] { color: var(--ink) }
+th.num, td.num { text-align: right }
+td { padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top }
+tbody tr:last-child td { border-bottom: 0 }
+tr.item { cursor: pointer }
+tr.item:hover td { background: var(--sunk) }
+.fname { font-family: var(--mono); font-size: 13px; overflow-wrap: anywhere }
+.subj { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; margin-top: 2px }
+.who-narrow { display: none }
+.kind { display: inline-block; font-family: var(--mono); font-size: 10.5px; font-weight: 500; letter-spacing: 0.04em; border: 1px solid currentColor; border-radius: 3px; padding: 0 4px; margin-right: 7px; vertical-align: 1px }
+.k-pdf { color: var(--k-pdf) } .k-doc { color: var(--k-doc) } .k-sheet { color: var(--k-sheet) } .k-slides { color: var(--k-slides) }
+.k-image { color: var(--k-image) } .k-cal { color: var(--k-cal) } .k-zip { color: var(--k-zip) } .k-other { color: var(--k-other) }
+.email { color: var(--muted); font-size: 13px; overflow-wrap: anywhere }
+.mono { font-family: var(--mono); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap }
+.tag { font-size: 11px; background: var(--accent-soft); color: var(--accent); border-radius: 3px; padding: 1px 5px; margin-left: 6px; white-space: nowrap }
+tr.group td { background: var(--sunk); font-weight: 600; cursor: pointer; padding-block: 7px }
+tr.group .gmeta { font-weight: 400; color: var(--muted); font-size: 13px; margin-left: 8px }
+tr.detail td { background: var(--sunk); cursor: default }
+.dgrid { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; font-size: 13px; margin: 0 0 10px }
+.dgrid dt { color: var(--muted) } .dgrid dd { margin: 0; overflow-wrap: anywhere }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 500 }
+button.primary:hover { filter: brightness(1.08) }
+button:disabled { opacity: 0.6; cursor: progress }
+.status { font-size: 13px; color: var(--muted); min-width: 0; overflow-wrap: anywhere }
+.empty { padding: 40px 20px; text-align: center; color: var(--muted) }
+.empty strong { display: block; color: var(--ink); font-size: 16px; margin-bottom: 4px }
+.more { display: flex; justify-content: center }
+footer { color: var(--muted); font-size: 13px; max-width: 65ch }
+
+@media (max-width: 760px) {
+  .c-from, .c-domain { display: none }
+  .who-narrow { display: block }
+  td, th button { padding-inline: 9px }
+  .field.date { flex: 1 1 130px }
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Mailbird Attachment Tool</h1>
+    <p class="sub" id="sub">Loading the index…</p>
+  </header>
+  <div class="notice" id="notice" hidden></div>
+
+  <section class="bench" aria-label="Filters">
+    <div class="row">
+      <div class="field grow">
+        <label for="q">Search</label>
+        <input type="search" id="q" placeholder="File name, subject, or sender" autocomplete="off">
+      </div>
+      <div class="field grow">
+        <label for="domain">Domain</label>
+        <input type="text" id="domain" list="domains" placeholder="e.g. example.org" autocomplete="off" spellcheck="false">
+        <datalist id="domains"></datalist>
+      </div>
+      <div class="field date">
+        <label for="from">From date</label>
+        <input type="date" id="from">
+      </div>
+      <div class="field date">
+        <label for="to">To date</label>
+        <input type="date" id="to">
+      </div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <span class="lab">Quick range</span>
+        <div class="chips" id="presets">
+          <button class="chip" data-days="30">Last 30 days</button>
+          <button class="chip" data-days="90">Last 90 days</button>
+          <button class="chip" data-days="ytd">This year</button>
+          <button class="chip" data-days="all">All dates</button>
+        </div>
+      </div>
+      <div class="field">
+        <label for="dir">Direction</label>
+        <select id="dir"><option value="all">Received and sent</option><option value="in">Received</option><option value="out">Sent by me</option></select>
+      </div>
+      <div class="field">
+        <label for="group">Group by</label>
+        <select id="group"><option value="none">No grouping</option><option value="domain">Domain</option><option value="sender">Sender</option></select>
+      </div>
+    </div>
+    <div class="field">
+      <span class="lab">File type</span>
+      <div class="chips" id="types"></div>
+    </div>
+    <div class="field">
+      <span class="lab">Top domains in this view</span>
+      <div class="chips" id="topdomains"></div>
+    </div>
+    <label class="check" id="inlinewrap" for="inline"><input type="checkbox" id="inline"> Include signature logos and other inline images</label>
+  </section>
+
+  <div class="tally">
+    <p id="tally"></p>
+    <button class="linkish" id="reset">Clear filters</button>
+  </div>
+
+  <div class="ledger">
+    <table>
+      <thead><tr>
+        <th><button data-sort="file">File</button></th>
+        <th class="c-from"><button data-sort="sender">From</button></th>
+        <th class="c-domain"><button data-sort="domain">Domain</button></th>
+        <th><button data-sort="date">Date</button></th>
+        <th class="num"><button data-sort="size">Size</button></th>
+      </tr></thead>
+      <tbody id="body"></tbody>
+    </table>
+    <div class="empty" id="empty" hidden></div>
+  </div>
+  <div class="more"><button id="more" hidden>Show more</button></div>
+
+  <footer id="foot">Sizes are estimates. Mail servers report the encoded transfer size, which runs about a third larger than the file, so each figure here is scaled down to match. Select a row to open the email in Mailbird or save the file.</footer>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const TYPES = [['pdf','PDF'],['doc','Document'],['sheet','Spreadsheet'],['slides','Slides'],['image','Image'],['cal','Calendar'],['zip','Archive'],['other','Other']];
+const BADGE = {pdf:'PDF',doc:'DOC',sheet:'XLS',slides:'PPT',image:'IMG',cal:'ICS',zip:'ZIP',other:'FILE'};
+const EXT = {pdf:'pdf',doc:'doc',docx:'doc',rtf:'doc',txt:'doc',odt:'doc',pages:'doc',md:'doc',xls:'sheet',xlsx:'sheet',xlsm:'sheet',csv:'sheet',ods:'sheet',numbers:'sheet',
+  ppt:'slides',pptx:'slides',key:'slides',png:'image',jpg:'image',jpeg:'image',gif:'image',heic:'image',webp:'image',bmp:'image',tif:'image',tiff:'image',svg:'image',
+  ics:'cal',vcs:'cal',zip:'zip','7z':'zip',rar:'zip',gz:'zip',tar:'zip'};
+const state = { msg:null, busy:false, q:'', domain:'', from:'', to:'', dir:'all', group:'none', types:new Set(), inline:false, sort:'date', asc:false, limit:200, collapsed:new Set(), open:null };
+let rows = [], meta = {};
+
+function kindOf(a) {
+  const ext = (String(a.file || '').split('.').pop() || '').toLowerCase(), m = String(a.mime || '').toLowerCase();
+  if (EXT[ext]) return EXT[ext];
+  if (m.includes('pdf')) return 'pdf';
+  if (m.startsWith('image/')) return 'image';
+  if (m.includes('calendar')) return 'cal';
+  if (m.includes('spreadsheet') || m.includes('excel')) return 'sheet';
+  if (m.includes('presentation') || m.includes('powerpoint')) return 'slides';
+  if (m.includes('word') || m.startsWith('text/')) return 'doc';
+  if (m.includes('zip') || m.includes('compressed')) return 'zip';
+  return 'other';
+}
+const pad = n => String(n).padStart(2, '0');
+const dayOf = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+function fmtSize(b) {
+  if (!b) return '';
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return Math.round(b / 1024) + ' KB';
+  return (b / 1048576).toFixed(b < 10485760 ? 1 : 0) + ' MB';
+}
+const fmtDate = t => new Date(t).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' });
+const fmtDay = t => new Date(t).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric', timeZone:'UTC' });
+
+function init(data) {
+  meta = (data && data.meta) || {};
+  const me = String(meta.account || '').toLowerCase();
+  rows = ((data && data.attachments) || []).map((a, i) => {
+    const iso = String(a.date || ''), t = Date.parse(/Z|[+-]\d\d:?\d\d$/.test(iso) ? iso : iso + 'Z');
+    const email = String(a.fromEmail || '').toLowerCase();
+    return Object.assign({}, a, { i, t: isNaN(t) ? 0 : t, day: isNaN(t) ? '' : dayOf(new Date(t)), email,
+      domain: email.includes('@') ? email.split('@').pop() : '', kind: kindOf(a), bytes: Math.round((a.size || 0) * 0.75), sent: !!me && email === me,
+      hay: [a.file, a.subject, a.fromName, email].join(' ').toLowerCase() });
+  });
+  const cov = meta.coverage || {}, bits = [];
+  if (meta.account) bits.push('<b>' + esc(meta.account) + '</b>');
+  if (cov.from && cov.to) bits.push('covers ' + esc(fmtDay(Date.parse(cov.from))) + ' to ' + esc(fmtDay(Date.parse(cov.to))));
+  if (meta.generatedAt) bits.push('indexed ' + esc(fmtDate(Date.parse(meta.generatedAt))));
+  $('sub').innerHTML = bits.length ? bits.join(' · ') : 'Every file that arrived or left by email, in one sortable list.';
+  if (meta.sample) { $('notice').hidden = false; $('notice').textContent = 'Sample data. These rows are invented examples that show how the index works. Your own attachments replace them once the index runs.'; }
+  else if (meta.note) { $('notice').hidden = false; $('notice').textContent = meta.note; }
+  $('inlinewrap').hidden = !rows.some(r => r.inline);
+  $('domains').innerHTML = [...new Set(rows.map(r => r.domain).filter(Boolean))].sort().map(d => '<option value="' + esc(d) + '">').join('');
+  render();
+}
+
+function passes(r, skip) {
+  if (!state.inline && r.inline) return false;
+  if (state.q && !state.q.split(/\s+/).every(w => r.hay.includes(w))) return false;
+  if (skip !== 'domain' && state.domain && !r.domain.includes(state.domain)) return false;
+  if (state.from && r.day < state.from) return false;
+  if (state.to && r.day > state.to) return false;
+  if (state.dir === 'in' && r.sent) return false;
+  if (state.dir === 'out' && !r.sent) return false;
+  if (skip !== 'types' && state.types.size && !state.types.has(r.kind)) return false;
+  return true;
+}
+const KEY = { file: r => String(r.file || '').toLowerCase(), sender: r => String(r.fromName || r.email).toLowerCase(), domain: r => r.domain, date: r => r.t, size: r => r.bytes };
+function sorted(list) {
+  const k = KEY[state.sort], dir = state.asc ? 1 : -1;
+  return list.slice().sort((a, b) => { const x = k(a), y = k(b); return x < y ? -dir : x > y ? dir : b.t - a.t; });
+}
+
+function itemRow(r) {
+  const who = esc(r.fromName || r.email);
+  let h = '<tr class="item" data-i="' + r.i + '" tabindex="0"><td><span class="kind k-' + r.kind + '">' + BADGE[r.kind] + '</span><span class="fname">' + esc(r.file) + '</span>' +
+    (r.inline ? '<span class="tag">inline</span>' : '') + (r.sent ? '<span class="tag">sent</span>' : '') +
+    '<div class="subj">' + esc(r.subject) + '</div><div class="subj who-narrow">' + who + (r.domain ? ' · ' + esc(r.domain) : '') + '</div></td>' +
+    '<td class="c-from">' + who + '<div class="email">' + esc(r.email) + '</div></td>' +
+    '<td class="c-domain"><span class="mono">' + esc(r.domain) + '</span></td>' +
+    '<td><span class="mono">' + esc(r.t ? fmtDate(r.t) : '') + '</span></td>' +
+    '<td class="num"><span class="mono">' + esc(fmtSize(r.bytes)) + '</span></td></tr>';
+  if (state.open === r.i) {
+    const busy = !!state.busy;
+    h += '<tr class="detail"><td colspan="5"><dl class="dgrid">' +
+      '<dt>Email subject</dt><dd>' + esc(r.subject) + '</dd>' +
+      '<dt>From</dt><dd>' + who + ' &lt;' + esc(r.email) + '&gt;</dd>' +
+      '<dt>Received</dt><dd>' + esc(r.t ? new Date(r.t).toLocaleString() : '') + '</dd>' +
+      (r.folder ? '<dt>Folder</dt><dd>' + esc(r.folder) + '</dd>' : '') +
+      (r.mime ? '<dt>File type</dt><dd>' + esc(r.mime) + '</dd>' : '') +
+      (r.messageId ? '<dt>Message</dt><dd class="mono">' + esc(r.messageId) + (r.attachmentId ? ' / ' + esc(r.attachmentId) : '') + '</dd>' : '') +
+      '</dl><div class="actions">' +
+      (mb.ok ? '<button class="primary" data-open="' + r.i + '"' + (busy ? ' disabled' : '') + '>Open email in Mailbird</button>' +
+               '<button class="primary" data-save="' + r.i + '"' + (busy ? ' disabled' : '') + '>Save file</button>' : '') +
+      '<span class="status" role="status">' + esc(state.msg && state.msg.i === r.i ? state.msg.text : (mb.ok ? '' : 'Open this page in the Claude desktop app, with Mailbird running, to open emails and save files from here.')) + '</span></div></td></tr>';
+  }
+  return h;
+}
+
+function render() {
+  const list = sorted(rows.filter(r => passes(r)));
+  const typeCount = {}; rows.filter(r => passes(r, 'types')).forEach(r => typeCount[r.kind] = (typeCount[r.kind] || 0) + 1);
+  $('types').innerHTML = TYPES.filter(([k]) => typeCount[k] || state.types.has(k)).map(([k, label]) =>
+    '<button class="chip" data-type="' + k + '" aria-pressed="' + state.types.has(k) + '">' + label + '<span class="n">' + (typeCount[k] || 0) + '</span></button>').join('') || '<span class="email">None in this view</span>';
+  const dc = {}; rows.filter(r => passes(r, 'domain')).forEach(r => { if (r.domain) dc[r.domain] = (dc[r.domain] || 0) + 1; });
+  $('topdomains').innerHTML = Object.entries(dc).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([d, n]) =>
+    '<button class="chip" data-domain="' + esc(d) + '" aria-pressed="' + (state.domain === d) + '">' + esc(d) + '<span class="n">' + n + '</span></button>').join('') || '<span class="email">None in this view</span>';
+
+  const total = list.reduce((s, r) => s + r.bytes, 0);
+  $('tally').innerHTML = rows.length ? '<b>' + list.length.toLocaleString() + '</b> of ' + rows.length.toLocaleString() + ' attachments · <b>' + esc(fmtSize(total) || '0 B') + '</b> · ' +
+    new Set(list.map(r => r.email)).size + ' senders at ' + new Set(list.map(r => r.domain)).size + ' domains' : '';
+  document.querySelectorAll('th button').forEach(b => { if (b.dataset.sort === state.sort) b.setAttribute('aria-sort', state.asc ? 'ascending' : 'descending'); else b.removeAttribute('aria-sort');
+    if (!b.dataset.label) b.dataset.label = b.textContent;
+    b.textContent = b.dataset.label + (b.dataset.sort === state.sort ? (state.asc ? ' \u25B2' : ' \u25BC') : ''); });
+
+  const shown = list.slice(0, state.limit); let html = '';
+  if (state.group === 'none') html = shown.map(itemRow).join('');
+  else {
+    const keyOf = state.group === 'domain' ? r => r.domain || '(no domain)' : r => (r.fromName ? r.fromName + ' ' : '') + '<' + r.email + '>';
+    const groups = new Map(); list.forEach(r => { const k = keyOf(r); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); });
+    let budget = state.limit;
+    [...groups.entries()].sort((a, b) => b[1].length - a[1].length).forEach(([k, g]) => {
+      if (budget <= 0) return;
+      const shut = state.collapsed.has(k);
+      html += '<tr class="group" data-group="' + esc(k) + '" tabindex="0"><td colspan="5">' + (shut ? '▸ ' : '▾ ') + esc(k) + '<span class="gmeta">' + g.length + (g.length === 1 ? ' file' : ' files') + ' · ' + esc(fmtSize(g.reduce((s, r) => s + r.bytes, 0))) + '</span></td></tr>';
+      if (!shut) { html += g.slice(0, budget).map(itemRow).join(''); budget -= g.length; }
+    });
+  }
+  $('body').innerHTML = html;
+  $('more').hidden = list.length <= state.limit;
+  $('more').textContent = 'Show more (' + (list.length - state.limit).toLocaleString() + ' left)';
+  const empty = $('empty'); empty.hidden = list.length > 0;
+  if (!list.length) empty.innerHTML = rows.length
+    ? '<strong>Nothing matches these filters</strong>Widen the date range or clear a filter. A range older than the index covers will always come up empty.'
+    : '<strong>No attachments indexed yet</strong>Ask Claude to refresh the attachment index. It reads your mailbox through Mailbird and fills this list.';
+}
+
+function rerender(resetPage) { if (resetPage) { state.limit = 200; state.open = null; } render(); }
+['q', 'domain'].forEach(id => $(id).addEventListener('input', e => { state[id] = e.target.value.trim().toLowerCase(); rerender(true); }));
+['from', 'to', 'dir', 'group'].forEach(id => $(id).addEventListener('change', e => { state[id] = e.target.value; rerender(true); }));
+$('inline').addEventListener('change', e => { state.inline = e.target.checked; rerender(true); });
+$('presets').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return; const d = b.dataset.days, now = new Date();
+  if (d === 'all') { state.from = state.to = ''; }
+  else if (d === 'ytd') { state.from = now.getFullYear() + '-01-01'; state.to = ''; }
+  else { state.from = dayOf(new Date(now.getTime() - d * 864e5)); state.to = ''; }
+  $('from').value = state.from; $('to').value = state.to; rerender(true);
+});
+$('types').addEventListener('click', e => { const b = e.target.closest('[data-type]'); if (!b) return; const k = b.dataset.type; state.types.has(k) ? state.types.delete(k) : state.types.add(k); rerender(true); });
+$('topdomains').addEventListener('click', e => { const b = e.target.closest('[data-domain]'); if (!b) return; state.domain = state.domain === b.dataset.domain ? '' : b.dataset.domain; $('domain').value = state.domain; rerender(true); });
+document.querySelector('thead').addEventListener('click', e => { const b = e.target.closest('[data-sort]'); if (!b) return;
+  if (state.sort === b.dataset.sort) state.asc = !state.asc; else { state.sort = b.dataset.sort; state.asc = !(state.sort === 'date' || state.sort === 'size'); } rerender(); });
+$('more').addEventListener('click', () => { state.limit += 200; render(); });
+$('reset').addEventListener('click', () => {
+  Object.assign(state, { q:'', domain:'', from:'', to:'', dir:'all', types:new Set(), inline:false });
+  ['q', 'domain', 'from', 'to'].forEach(id => $(id).value = ''); $('dir').value = 'all'; $('inline').checked = false; rerender(true);
+});
+
+/* Mailbird actions. They work when this page is open in the Claude desktop app with Mailbird running. */
+const mb = { ok:false, mcp:null, dl:null, server:'host:mailbird' };
+const SAVE_EXT = new Set(['gif','png','jpg','jpeg','webp','mp4','webm','mov','txt','json','md','docx','pptx','epub','csv','ttf','html','svg','pdf','xlsx','zip','fig']);
+function say(i, text) { state.msg = { i, text }; render(); }
+function b64ToBytes(b64) { const bin = atob(String(b64).replace(/\s+/g, '')), out = new Uint8Array(bin.length); for (let k = 0; k < bin.length; k++) out[k] = bin.charCodeAt(k); return out; }
+function fileBytes(res) {
+  const blocks = (res && res.content) || [];
+  for (const b of blocks) {
+    if (b && b.type === 'resource' && b.resource && b.resource.blob) return b64ToBytes(b.resource.blob);
+    if (b && b.type === 'image' && b.data) return b64ToBytes(b.data);
+    if (b && b.type === 'blob' && b.data) return b64ToBytes(b.data);
+  }
+  return null;
+}
+function failText(e, what) {
+  const c = e && e.code;
+  if (c === 'server_not_connected') return 'Mailbird is not reachable. Open this page in the Claude desktop app with Mailbird running.';
+  if (c === 'not_in_manifest' || c === 'not_granted' || c === 'consent_required') return 'This page is not allowed to use Mailbird. Turn it on in the page’s Permissions menu, then try again.';
+  if (c === 'approval_required' || c === 'cancelled') return 'The Claude app asked for approval and it was not given.';
+  if (c === 'server_unavailable' || c === 'upstream_error') return 'Mailbird did not answer. Check that it is open, then try again.';
+  if (c === 'tool_error') return what === 'open' ? 'Mailbird could not find that conversation. It may have been moved or deleted.' : 'Mailbird could not provide that file. It may be over 10 MB or no longer on the server.';
+  return 'That did not work (' + (c || 'unknown error') + ').';
+}
+async function openMail(r) {
+  if (state.busy) return; state.busy = true; say(r.i, 'Opening in Mailbird…');
+  try { await mb.mcp.callTool(mb.server, 'select_conversation', { conversationId: r.conversationId, forceNewWindow: true }); state.busy = false; say(r.i, 'Opened in a new Mailbird window.'); }
+  catch (e) { state.busy = false; say(r.i, failText(e, 'open')); }
+}
+async function saveFile(r) {
+  if (state.busy) return;
+  const ext = (String(r.file).split('.').pop() || '').toLowerCase();
+  if (!mb.dl) return say(r.i, 'Saving files is not available in this view. Open the email in Mailbird instead.');
+  if (!SAVE_EXT.has(ext)) return say(r.i, 'This page cannot save .' + ext + ' files. Open the email in Mailbird instead.');
+  state.busy = true; say(r.i, 'Getting the file from Mailbird…');
+  try {
+    const res = await mb.mcp.callTool(mb.server, 'get_attachment_content', { messageId: r.messageId, attachmentId: r.attachmentId }, { cache: false });
+    const bytes = fileBytes(res);
+    if (!bytes || !bytes.length) { state.busy = false; return say(r.i, 'Mailbird sent the file in a form this page cannot read. Open the email in Mailbird instead.'); }
+    await mb.dl.save({ filename: r.file, data: new Blob([bytes]) });
+    state.busy = false; say(r.i, 'Saved.');
+  } catch (e) {
+    state.busy = false;
+    say(r.i, e && e.code === 'declined' ? 'Save cancelled.' : e && e.code === 'rejected_extension' ? 'This file type cannot be saved from this page.' : failText(e, 'save'));
+  }
+}
+async function setupMailbird() {
+  try {
+    if (!window.claude || !window.claude.use) return;
+    mb.mcp = await window.claude.use('mcp'); mb.dl = await window.claude.use('downloads');
+    if (!mb.mcp) return;
+    const l = await mb.mcp.listTools();
+    mb.ok = (l.servers || []).some(x => x.server === mb.server);
+    if (mb.ok) render();
+  } catch (e) { /* page keeps the copy button */ }
+}
+function bodyAct(e) {
+  const op = e.target.closest('[data-open]'); if (op) { openMail(rows[+op.dataset.open]); return; }
+  const sv = e.target.closest('[data-save]'); if (sv) { saveFile(rows[+sv.dataset.save]); return; }
+  if (e.target.closest('tr.detail')) return;
+  const g = e.target.closest('tr.group');
+  if (g) { const k = g.dataset.group; state.collapsed.has(k) ? state.collapsed.delete(k) : state.collapsed.add(k); render(); return; }
+  const tr = e.target.closest('tr.item'); if (!tr) return;
+  const i = +tr.dataset.i; state.open = state.open === i ? null : i; render();
+}
+$('body').addEventListener('click', bodyAct);
+$('body').addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('tr')) { e.preventDefault(); bodyAct(e); } });
+
+setupMailbird();
+fetch('attachments.json').then(r => r.ok ? r.json() : Promise.reject()).then(init).catch(() => init({ meta: {}, attachments: [] }));
+</script>
