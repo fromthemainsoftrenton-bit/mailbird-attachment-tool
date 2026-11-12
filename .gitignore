@@ -1,0 +1,8 @@
+attachments.json
+parts/
+work/
+verify/
+*.jsonl
+*.tsv
+folders.json
+.DS_Store
